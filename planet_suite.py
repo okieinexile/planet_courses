@@ -6,6 +6,44 @@ Created on Tue Oct 31 16:44:17 2017
 """
 import numpy as np
 import pandas as pd
+import pylab as plt
+import matplotlib.pyplot as plt3
+from mpl_toolkits.mplot3d import Axes3D
+
+DATAPATH='data//'
+REPORTPATH='report//'
+INNERPLANETS=['mercury','venus','earth','mars']
+OUTERPLANETS=['mars','jupiter','saturn','uranus','neptune']
+
+def planet_3d(planetlist):
+    fig = plt3.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    fmt=DATAPATH+'{}_ecliptic.csv'
+    for planet in planetlist:
+        planet_orb(planet)
+        put_in_position(planet)
+        df=pd.read_csv(fmt.format(planet))
+        X=list(df['x'])
+        Y=list(df['y'])
+        Z=list(df['z'])
+        ax.plot(X,Y,Z)
+    return None
+
+def planet_graph(planetlist,listname):
+    for p in planetlist:
+        print(p)
+        planet_orb(p)
+        put_in_position(p)
+        fmt=DATAPATH+'{}_ecliptic.csv'
+        df=pd.read_csv(fmt.format(p))
+        X=list(df['x'])
+        Y=list(df['y'])
+        plt.axis('equal')
+        plt.plot(X,Y)
+    pict_fmt=REPORTPATH+'{}.jpg'
+    pictfile=pict_fmt.format(listname)
+    plt.savefig(pictfile,format='jpg',dpi=1200)
 
 def planet_table(planet):
     planet1='earth'
@@ -14,8 +52,9 @@ def planet_table(planet):
     planet_orb(planet2)
     put_in_position(planet1)
     put_in_position(planet2)
-    relative_position(planet1,planet2)
+    relative_position(planet2,planet1)
     celestial_coords(planet)
+    draw_orb(planet)
     
     return 'Done'
 
@@ -27,25 +66,27 @@ def planet_table(planet):
 # and will save it at <planet>_table.txt.  An intermediate file
 # <planet>_relativeto_earth_equatorial.txt will be
 # created.
-#==============================================================================
+#===============================================================================
 def celestial_coords(planet):
-    import csv
-    import numpy as np
+    """This returns the file <planet>_table.csv that contains the
+    celestial coordinates of the planet's orbit."""
     M=rotation(23.44,[1,0,0])
     mFrame=read_relative_position(planet)
-    N=len(mFrame.values)
-    savefile=planet+'_table.txt'
-    intmdfile=planet+'_reltativeto_earth_equatorial.txt'
-    sfile=open(savefile,'wt')
-    writer=csv.writer(sfile)    
-    ifile=open(intmdfile,'wt')
-    writeri=csv.writer(ifile)
-    for i in range(N):
-        day,x,y,z=mFrame.values[i]
-        w=np.matrix([x,y,z])
-        v=M*w.T
-        x,y,z=v[0,0],v[1,0],v[2,0]
-        writeri.writerow([day,x,y,z])
+    save_fmt=REPORTPATH+'{}_table.csv'
+    savefile=save_fmt.format(planet)
+    #int_fmt='{}_reltativeto_earth_equatorial.csv'
+    #intmdfile=int_fmt.format(planet)
+    X=np.array(mFrame['x'])
+    Y=np.array(mFrame['y'])
+    Z=np.array(mFrame['z'])
+    V=zip(X,Y,Z)
+    V=list(map(lambda x:np.matrix(x),V))
+    W=np.array(map(lambda x:M*x.transpose(),V))
+    date=list(map(lambda d:standard_date(d),mFrame['day']))
+    ra=list()
+    dc=list()
+    for w in W:
+        x,y,z=w[0,0],w[1,0],w[2,0]    
         rho=np.sqrt(x*x+y*y+z*z)
         x,y,z=x/rho,y/rho,z/rho
         r=np.sqrt(x*x+y*y)
@@ -53,56 +94,43 @@ def celestial_coords(planet):
         delta=rad_to_dms(delta)
         alpha=2*np.arctan((1-x/r)/(y/r))
         if alpha<0:
-            alpha=alpha+2*np.pi
-        
+            alpha=alpha+2*np.pi        
         alpha=rad_to_hms(alpha)
-        #delta=180*delta/np.pi
-        date=standard_date(day)
-        writer.writerow([date, alpha, delta])
-    sfile.close()
-    ifile.close()
-
-    
+        ra.append(alpha)
+        dc.append(delta)
+    data={   
+        'date':date,
+        'right_ascension':ra,
+        'declination':dc  
+    }
+    df=pd.DataFrame(data)
+    df.to_csv(savefile)    
     return 'Done'
     
 
 def read_relative_position(planet):
-    import pandas
-    import csv
-    datafile=planet+'_relativeto_earth_ecliptic.txt'
-    file=open(datafile,'rt')
-    reader=csv.reader(file)
-    x=[]
-    y=[]
-    z=[]
-    day=[]
-    for line in reader:
-        if line!=[]:
-            d0,x0,y0,z0=line
-            x.append(float(x0))
-            y.append(float(y0))
-            z.append(float(z0))
-            day.append(int(d0))
-    data={
-    'day':day,
-    'x':x,
-    'y':y,
-    'z':z}
-    frame=pandas.DataFrame(data)
+    """This returns a file that containes the coordinates of planet
+    with respect to earth."""
+    d_fmt=DATAPATH+'{}_relativeto_earth_ecliptic.csv'
+    datafile=d_fmt.format(planet)
+    frame=pd.read_csv(datafile,usecols=['day','x','y','z'])
     return frame 
 def rad_to_hms(rad):
-    import numpy as np
+    """This takes in an angle rad in radians and renders it 
+    into hours, minutes, and seconds"""
     hours=12*rad/np.pi
     h=int(hours-hours%1)
     hours=(hours-h)*60
     m=int(hours-hours%1)
     hours=(hours-m)*60
     s=int(hours-hours%1)
-    out=str(h)+'h'+str(m)+'m'+str(s)+'s'
+    o_fmt='{}h {}m {}s'
+    out=o_fmt.format(h,m,s)
     return out
 
 def rad_to_dms(rad):
-    import numpy as np
+    """This takes in an angle rad in radians and renders it 
+    into degrees, minutes, and seconds"""
     sign=np.sign(rad)
     rad=np.abs(rad)
     degrees=180*rad/np.pi
@@ -111,11 +139,12 @@ def rad_to_dms(rad):
     m=int(degrees-degrees%1)
     degrees=(degrees-m)*60
     s=int(degrees-degrees%1)
-    out=str(d)+'d'+str(m)+'m'+str(s)+'s'
+    o_fmt='{}d {}m {}s {}'
     if sign>0:
-        out=out+' North'
+        direction='North'
     if sign<0:
-        out=out+' South'
+        direction='South'
+    out=o_fmt.format(d,m,s,direction)
     return out    
     
 
@@ -130,52 +159,42 @@ def rad_to_dms(rad):
 #==============================================================================
 
 def relative_position(planet1, planet2):
+    """This will give the coordinates of planet1 
+    with respect to planet2. The output is in a CSV file."""
     # planet1 is to be the base planet; in most cases this will be earth
     # planet2 will be the planet whose position we are plotting
-    import csv
     frame1=read_planet(planet1)
     frame2=read_planet(planet2)
     days1=frame1.day.values
     days2=frame2.day.values
     begin=max([min(days1),min(days2)])
     end=min([max(days1),max(days2)])
-    day=begin
     Flt1=((frame1.day>=begin)&(frame1.day<=end))
     F1=frame1[Flt1]
     Flt2=((frame2.day>=begin)&(frame2.day<=end))
     F2=frame2[Flt2]
-    savefile=planet2+'_relativeto_'+planet1+'_ecliptic.txt'
-    sfile=open(savefile,'wt')
-    writer=csv.writer(sfile)    
-    for i in range(end-begin):
-        x1,y1,z1=F1.values[i][1],F1.values[i][2],F1.values[i][3]
-        x2,y2,z2=F2.values[i][1],F2.values[i][2],F2.values[i][3]
-        v1,v2,v3=x2-x1,y2-y1,z2-z1
-        writer.writerow([day,v1,v2,v3])
-        day=day+1
-    sfile.close()
-    return None
-
-def read_planet(planet):
-    file=open(planet+'_ecliptic.txt')
-    reader=csv.reader(file)
-    x=[]
-    y=[]
-    z=[]
-    day=[]
-    for line in reader:
-        if line!=[]:
-            d0,x0,y0,z0=line
-            x.append(float(x0))
-            y.append(float(y0))
-            z.append(float(z0))
-            day.append(int(d0))
+    s_fmt=DATAPATH+'{}_relativeto_{}_ecliptic.csv'
+    savefile=s_fmt.format(planet1,planet2)
+    u=np.array(F1['x'])-np.array(F2['x'])
+    v=np.array(F1['y'])-np.array(F2['y'])
+    w=np.array(F1['z'])-np.array(F2['z'])
+    days=[i for i in range(begin,len(u)+begin)]
     data={
-    'day':day,
-    'x':x,
-    'y':y,
-    'z':z}
-    frame=pandas.DataFrame(data)
+        'day':days,
+        'x':u,
+        'y':v,
+        'z':w    
+    }
+    pos_frame=pd.DataFrame(data)
+    pos_frame.to_csv(savefile)
+
+    return None
+def read_planet(planet):
+    """This returns a file that contains the coordinates of the orbit of
+    planet in ecliptic coordinates."""
+    f_fmt=DATAPATH+'{}_ecliptic.csv'
+    frame=pd.read_csv(f_fmt.format(planet),usecols=['day','x','y','z'])
+
     return frame 
   
 
@@ -190,14 +209,14 @@ def read_planet(planet):
 #==============================================================================
     
 def put_in_position(planet):
+    """This puts the planet's orbit in its actual physical position."""
     get_matrix(planet)
-    mFmt='{}_matrix.csv'
+    mFmt=DATAPATH+'{}_matrix.csv'
     matfile=mFmt.format(planet)
     mat=pd.read_csv(matfile,usecols=[1,2,3])
-    #print(mat)
     R=np.matrix(mat)
-    o_fmt='{}_orbit.csv'
-    orbfile=o_fmt.format(planet)
+    o_fmt=DATAPATH+'{}_orbit.csv'
+    orbfile=o_fmt.format(planet)    
     o_df=pd.read_csv(orbfile)
     day=o_df['day']
     X=list(o_df['X'])
@@ -220,42 +239,34 @@ def put_in_position(planet):
         'z':Wz
     }
     pos_frame=pd.DataFrame(data)
-    p_fmt='{}_ecliptic.csv'
+    p_fmt=DATAPATH+'{}_ecliptic.csv'
     posfile=p_fmt.format(planet)
     pos_frame.to_csv(posfile)
-#
-#    for line in reader:
-#        if line!=[]:
-#            day,x,y=line
-#            x=float(x)
-#            y=float(y)
-#            v=np.matrix([x,y,0])
-#            w=R*v.T
-#            writer.writerow([day,w[0,0],w[1,0],w[2,0]])
-#    ofile.close()
-#    pfile.close()
     return None
 
 def get_matrix(planet):
-    fmt='{}_data2.txt'
-    filename=fmt.format(planet)
-    with open(filename,'rt') as myFile:
-        name,Omega,i,omega=myFile.read().split(',')
-        Omega=float(Omega)
-        i=float(i)
-        omega=float(omega)
+    """This creates the matrix that puts the planet into its
+    actual physical position and saves it in a file <planet>_matrix.csv."""
+    p_df=pd.read_csv(DATAPATH+'planetarydata.csv')
+    filt=(p_df['name']==planet)
+    df=p_df[filt]
+    Omega=list(df['Omega'])[0]
+    omega=list(df['omega'])[0]
+    i=list(df['inclination'])[0]
+    Om=(Omega/180)*np.pi
     R1=rotation(Omega,[0,0,1])
-    R2=rotation(i,[np.cos(Omega),np.sin(Omega),0])
+    R2=rotation(i,[np.cos(Om),np.sin(Om),0])
     R3=rotation(omega,[R2[0,2],R2[1,2],R2[2,2]])
     R=R3*R2*R1
-    mFmt='{}_matrix.csv'
+    mFmt=DATAPATH+'{}_matrix.csv'
     outfile=mFmt.format(planet)
     mat_frame=pd.DataFrame(R)
     mat_frame.to_csv(outfile)
-    return 'Matrix Done'
+    return None
 
 def rotation(theta, axisList):
-    import numpy as np
+    """This returns a rotation matrix of angle theta radians about
+    the axis with direction numbers in axisList"""
     axis=np.matrix(axisList)
     phi=theta*np.pi/180
     u=(1/(axis*axis.T)[0,0])*axis
@@ -276,29 +287,20 @@ def rotation(theta, axisList):
 # Calculate the planar orbit.  
 # Save that data to a file <planet>_orbit.txt.    
 #==============================================================================
-    
+
 def get_planet_data(planet):
-    """Given the name planet in lowercase, this will open the file where
-    the data is stored and return the planet's
-    name
-    eccentricity
-    period
-    semi-major axis
-    and date of perihelion
-    """
-    # open the file where the planet's data is stored
-    # and create a reader
-    fmt='{}_data1.txt'
-    filename=fmt.format(planet)
-    mFile=open(filename,'rt')
-    name,e,period,a,perihelion=mFile.read().split(',')
-    # convert the numerical data from string to floating point
-    e=float(e)
-    period=float(period)
-    a=float(a)
-    date=ord_day(perihelion)
-    # return the data
+    """This retrieves eccentricity, period, semimajor axis and date
+    of perihelion from the file planetarydata.csv."""
+    planet_data=pd.read_csv(DATAPATH+'planetarydata.csv')
+    filt=(planet_data['name']==planet)
+    df=planet_data[filt]
+    name=list(df['name'])[0]
+    e=list(df['e'])[0]
+    period=list(df['period'])[0]
+    a=list(df['a'])[0]
+    date=ord_day(list(df['perihelion'])[0])
     return (name,e,period,a,date)
+    
     
 def planet_orb(planet):
     """planet is the name of a planet in lowercase.  This will output to a file
@@ -307,7 +309,7 @@ def planet_orb(planet):
     # to go around the sun.
     # filename is where the output will be stored
     name,e,period,a,perihelion=get_planet_data(planet)
-    out_ft='{}_orbit.csv'
+    out_ft=DATAPATH+'{}_orbit.csv'
     outputfile=out_ft.format(planet)    
     data=dict()    
     day=list()
@@ -317,7 +319,7 @@ def planet_orb(planet):
 
     T=int(np.round(period,0)+1)
     for i in range(T):
-        M=i*n
+        M=i*n   
         nu=get_nu(M,e)
         r=a*(1-e*e)/(1+e*np.cos(nu))
         x=r*np.cos(nu)
@@ -340,7 +342,7 @@ def get_nu(M,e):
     M=mean anomaly 
     e=eccentricity
     to calculate
-    n=true anomaly
+    nu=true anomaly
     """
     E=M
     tol=1e-14
@@ -356,31 +358,37 @@ def get_nu(M,e):
     return nu 
     
     
-def draw_orb(filename):
-    import csv
-    import pylab as plt
-    X=[]
-    Y=[]
-    mFile=open(filename,'rt')
-    reader=csv.reader(mFile)
-    for row in reader:
-        if row!=[]:
-            i,x,y=row
-            X.append(float(x))
-            Y.append(float(y))
-    mFile.close()
+def draw_orb(planet):
+    """This draw of orbit of planet projected on the the ecliptic plane."""
+    fmt=DATAPATH+'{}_ecliptic.csv'
+    df=pd.read_csv(fmt.format(planet))
+    X=list(df['x'])
+    Y=list(df['y'])
     plt.axis('equal')
     plt.plot(X,Y)
-    name,ext=filename.split('.')
-    pictfile=name+'.jpg'
+    pict_fmt=REPORTPATH+'{}.jpg'
+    pictfile=pict_fmt.format(planet)
     plt.savefig(pictfile,format='jpg')
-    return 'Orbit Drawn'
+    fmt=DATAPATH+'{}_ecliptic.csv'
+    df=pd.read_csv(fmt.format(planet))
+    X=list(df['x'])
+    Y=list(df['y'])
+    plt.axis('equal')
+    plt.plot(X,Y)
+    pict_fmt=REPORTPATH+'{}.jpg'
+    pictfile=pict_fmt.format(planet)
+    plt.savefig(pictfile,format='jpg')
+    return None
     
 #==============================================================================
 # Calendar functions to calculate dates as integers. And to return those 
 # integral values to standard American forme.    
 #==============================================================================
+
 def days_after(mdy1,mdy2):
+    """Enter the days in the mm/dd/yy format and it returns the number of days 
+    the second is after the first.
+    """
     # enter dates mdy1 and mdy2 in the form 'mm/dd/yyyy'
     # mdy1 is assumed to be earlier than mdy2
     d1=ord_day(mdy1)
@@ -389,9 +397,10 @@ def days_after(mdy1,mdy2):
     return dif
 
 def ord_day(mdy):
-    # mdy is a string of the form 'mm/dd/yyyy' of the day in question
-    # basemdy is a string of the form 'mm/dd/yyyy' of a base day in the past
-    #   which is after the change to Gregorian Time. We set it as '1/1/1800'
+    """ mdy is a string of the form 'mm/dd/yyyy' of the day in question
+    basemdy is a string of the form 'mm/dd/yyyy' of a base day in the past
+     which is after the change to Gregorian Time. We set it as '1/1/1800'
+    """
     basemdy='1/1/1800'
     ds=0         
     bm,bd,by=basemdy.split('/')
@@ -451,4 +460,39 @@ def standard_date(order):
     d=int(order)
     mdy=str(m)+'/'+str(d)+'/'+str(year)
     return(mdy)
-     
+    
+    
+def latex_table(planet):
+    fmt=REPORTPATH+'{}_table.csv'
+    df=pd.read_csv(fmt.format(planet),usecols=['date','declination','right_ascension'])
+    Columns=list(df.columns)
+    c_fmt='{{{}}}'
+    item='{} & '
+    table='\\begin{tabular}'
+    line='' 
+    for c in Columns:
+        line=line+c_fmt.format('c')
+    table=table+line+'\n '
+    line=''
+    for c in Columns:
+        line=line+item.format(c)
+    line=line[:-2]+'\\\\ \n '
+    N=len(list(df['date']))
+    table=table+line
+    for i in range(N):
+        line=''
+        for j, c in enumerate(Columns):
+            line=line+item.format(df.iat[i,j])
+        line=line[:-2] + '\\\\ \n '
+        table=table+line
+    table=table[:-4]+'\n '
+    table=table + '\end{tabular}'
+    out_fmt='{}_table.tex'
+    ofile=REPORTPATH+out_fmt.format(planet)
+    with open(ofile,'w') as f:
+        f.write(table)
+    return  None 
+
+
+    
+    
